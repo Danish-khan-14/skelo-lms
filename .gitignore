@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+SKlmsenv/
+env/
+venv/
+*.db
+
+# Node
+node_modules/
+.env
+npm-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
