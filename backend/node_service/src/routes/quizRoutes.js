@@ -43,6 +43,10 @@ router.post("/submit", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "question_id, selected_answer and time_taken_sec are required" });
     }
 
+    if (time_taken_sec <= 0 || time_taken_sec > 3600) {
+        return res.status(400).json({ error: "time_taken_sec must be between 1 and 3600" });
+    }
+
     const question = db.prepare("SELECT * FROM quiz_questions WHERE id = ?").get(question_id);
     if (!question) {
         return res.status(404).json({ error: "Question not found" });
@@ -65,19 +69,30 @@ router.post("/submit", authenticateToken, async (req, res) => {
 
     const current_score = abilityRow ? abilityRow.ability_score : 50.0;
 
-    const pythonResponse = await axios.post(
-        `${process.env.PYTHON_SERVICE_URL}/evaluate`,
-        {
-            student_id,
-            subject_id,
-            current_ability_score: current_score,
-            is_correct: is_correct === 1,
-            difficulty: question.difficulty,
-            time_taken_sec
-        }
-    );
+    let ability_score = current_score;
+    let next_difficulty = "Easy";
+    let is_mastery = false;
+    let is_struggle = false;
 
-    const { ability_score, next_difficulty, is_mastery, is_struggle } = pythonResponse.data;
+    try {
+        const pythonResponse = await axios.post(
+            `${process.env.PYTHON_SERVICE_URL}/evaluate`,
+            {
+                student_id,
+                subject_id,
+                current_ability_score: current_score,
+                is_correct: is_correct === 1,
+                difficulty: question.difficulty,
+                time_taken_sec
+            }
+        );
+        ability_score = pythonResponse.data.ability_score;
+        next_difficulty = pythonResponse.data.next_difficulty;
+        is_mastery = pythonResponse.data.is_mastery;
+        is_struggle = pythonResponse.data.is_struggle;
+    } catch (err) {
+        console.error("Python service error:", err.message);
+    }
 
     if (abilityRow) {
         db.prepare(`
@@ -106,7 +121,7 @@ router.get("/dashboard", authenticateToken, (req, res) => {
 
     const attempts = db.prepare(`
         SELECT COUNT(*) as total_attempts,
-        SUM(is_correct) as correct_attempts
+        COALESCE(SUM(is_correct), 0) as correct_attempts
         FROM quiz_attempts WHERE student_id = ?
     `).get(student_id);
 
@@ -126,12 +141,13 @@ router.get("/dashboard", authenticateToken, (req, res) => {
         LIMIT 10
     `).all(student_id);
 
+    const total = attempts.total_attempts || 0;
+    const correct = attempts.correct_attempts || 0;
+
     res.status(200).json({
-        total_attempts: attempts.total_attempts,
-        correct_attempts: attempts.correct_attempts,
-        accuracy: attempts.total_attempts > 0
-            ? Math.round((attempts.correct_attempts / attempts.total_attempts) * 100)
-            : 0,
+        total_attempts: total,
+        correct_attempts: correct,
+        accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
         ability_scores,
         recent_attempts
     });
@@ -140,21 +156,29 @@ router.get("/dashboard", authenticateToken, (req, res) => {
 router.get("/recommendations", authenticateToken, async (req, res) => {
     const student_id = req.user.id;
 
-    const pythonResponse = await axios.get(
-        `${process.env.PYTHON_SERVICE_URL}/recommend/${student_id}`
-    );
-
-    res.status(200).json(pythonResponse.data);
+    try {
+        const pythonResponse = await axios.get(
+            `${process.env.PYTHON_SERVICE_URL}/recommend/${student_id}`
+        );
+        res.status(200).json(pythonResponse.data);
+    } catch (err) {
+        console.error("Python service error:", err.message);
+        res.status(503).json({ error: "Recommendation service unavailable" });
+    }
 });
 
 router.get("/report", authenticateToken, async (req, res) => {
     const student_id = req.user.id;
 
-    const pythonResponse = await axios.get(
-        `${process.env.PYTHON_SERVICE_URL}/report/${student_id}`
-    );
-
-    res.status(200).json(pythonResponse.data);
+    try {
+        const pythonResponse = await axios.get(
+            `${process.env.PYTHON_SERVICE_URL}/report/${student_id}`
+        );
+        res.status(200).json(pythonResponse.data);
+    } catch (err) {
+        console.error("Python service error:", err.message);
+        res.status(503).json({ error: "Report service unavailable" });
+    }
 });
 
 module.exports = router;

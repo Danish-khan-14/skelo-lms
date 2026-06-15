@@ -4,24 +4,36 @@ Adaptive Learning Management System backend built with Python FastAPI and Node.j
 
 ## Project Structure
 backend/
-├── python_service/     # AI/ML adaptive engine
-│   ├── main.py         # FastAPI endpoints
-│   ├── ability_engine.py # Adaptive algorithm
-│   ├── database.py     # SQLite connection
-│   ├── seed_data.py    # Seed script
-│   └── ALGORITHM.md    # Algorithm documentation
-└── node_service/       # API gateway
+
+├── python_service/          # AI/ML adaptive engine
+
+│   ├── main.py              # FastAPI endpoints
+
+│   ├── ability_engine.py    # Adaptive algorithm
+
+│   ├── database.py          # SQLite connection
+
+│   ├── seed_data.py         # Seed script
+
+│   └── ALGORITHM.md         # Algorithm documentation
+
+└── node_service/            # API gateway
+
 └── src/
+
 ├── server.js
+
 ├── routes/
+
 ├── middleware/
+
 └── db/
 
 ## Setup Instructions
 
 ### Step 1 — Clone Repository
 ```bash
-git clone <repo_url>
+git clone https://github.com/Danish-khan-14/skelo-lms.git
 cd skelo-lms
 ```
 
@@ -44,7 +56,9 @@ npm run dev
 
 ### Step 4 — Verify Both Services
 http://localhost:8000/health → Python service
+
 http://localhost:3000/health → Node service
+
 http://localhost:8000/docs  → API documentation
 
 ## API Endpoints
@@ -62,7 +76,6 @@ http://localhost:8000/docs  → API documentation
 | POST | /api/quiz/submit | Submit answer |
 | GET | /api/quiz/recommendations | Get top 3 recommendations |
 | GET | /api/quiz/report | Student performance report |
-| GET | /api/quiz/dashboard | Full dashboard data |
 
 ### Courses
 | Method | Endpoint | Description |
@@ -80,7 +93,7 @@ http://localhost:8000/docs  → API documentation
 ## Adaptive Algorithm
 
 - Ability Score: 0–100 per subject
-- Difficulty routing: Easy(0-44), Medium(45-74), Hard(75-100)
+- Difficulty routing: Easy (0–44), Medium (45–74), Hard (75–100)
 - Mastery: >75% on Hard questions 3 times in a row
 - Struggle: <50% accuracy on Easy questions
 - Recommendations: based on ability score + gap analysis

@@ -1,5 +1,6 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, validator
 import logging
 from database import initialize_database, get_connection
 from ability_engine import (
@@ -13,7 +14,12 @@ from ability_engine import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Skelo LMS - AI Microservice")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database()
+    yield
+
+app = FastAPI(title="Skelo LMS - AI Microservice", lifespan=lifespan)
 
 class EvaluateRequest(BaseModel):
     student_id: int
@@ -23,9 +29,23 @@ class EvaluateRequest(BaseModel):
     difficulty: str
     time_taken_sec: int
 
-@app.on_event("startup")
-def on_startup():
-    initialize_database()
+    @validator("time_taken_sec")
+    def validate_time(cls, v):
+        if v <= 0 or v > 3600:
+            raise ValueError("time_taken_sec must be between 1 and 3600")
+        return v
+
+    @validator("difficulty")
+    def validate_difficulty(cls, v):
+        if v not in ["Easy", "Medium", "Hard"]:
+            raise ValueError("difficulty must be Easy, Medium or Hard")
+        return v
+
+    @validator("current_ability_score")
+    def validate_score(cls, v):
+        if v < 0 or v > 100:
+            raise ValueError("current_ability_score must be between 0 and 100")
+        return v
 
 @app.get("/health")
 def health_check():
@@ -38,9 +58,11 @@ def evaluate_attempt(request: EvaluateRequest):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT qa.is_correct, qq.difficulty, qa.created_at
+        SELECT qa.is_correct, qq.difficulty, qa.created_at,
+        sa.ability_score as attempt_score
         FROM quiz_attempts qa
         JOIN quiz_questions qq ON qa.question_id = qq.id
+        LEFT JOIN student_ability sa ON sa.student_id = qa.student_id
         WHERE qa.student_id = ?
         ORDER BY qa.created_at DESC
         LIMIT 10
@@ -51,7 +73,7 @@ def evaluate_attempt(request: EvaluateRequest):
         {
             "is_correct": bool(row["is_correct"]),
             "difficulty": row["difficulty"],
-            "score": request.current_ability_score
+            "score": row["attempt_score"] if row["attempt_score"] is not None else 50.0
         }
         for row in recent_rows
     ]
@@ -245,7 +267,7 @@ def get_course_analytics(course_id: int):
     cursor.execute("""
         SELECT COUNT(DISTINCT qa.student_id) as total_students,
         COUNT(qa.id) as total_attempts,
-        SUM(qa.is_correct) as correct_attempts,
+        COALESCE(SUM(qa.is_correct), 0) as correct_attempts,
         AVG(qa.time_taken_sec) as avg_time_sec
         FROM quiz_attempts qa
         JOIN quiz_questions qq ON qa.question_id = qq.id
@@ -258,7 +280,7 @@ def get_course_analytics(course_id: int):
     cursor.execute("""
         SELECT qq.difficulty,
         COUNT(qa.id) as attempts,
-        SUM(qa.is_correct) as correct,
+        COALESCE(SUM(qa.is_correct), 0) as correct,
         AVG(qa.time_taken_sec) as avg_time
         FROM quiz_attempts qa
         JOIN quiz_questions qq ON qa.question_id = qq.id
@@ -272,7 +294,7 @@ def get_course_analytics(course_id: int):
     cursor.execute("""
         SELECT t.title as topic,
         COUNT(qa.id) as attempts,
-        SUM(qa.is_correct) as correct
+        COALESCE(SUM(qa.is_correct), 0) as correct
         FROM quiz_attempts qa
         JOIN quiz_questions qq ON qa.question_id = qq.id
         JOIN topics t ON qq.topic_id = t.id

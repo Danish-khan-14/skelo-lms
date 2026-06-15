@@ -6,11 +6,19 @@ SKlmsenv/
 env/
 venv/
 *.db
+*.db-shm
+*.db-wal
 
 # Node
 node_modules/
 .env
 npm-debug.log
+
+# Dev/Test files
+backend/python_service/check_questions.py
+backend/python_service/verify.py
+backend/python_service/test_students.py
+backend/python_service/models.py
 
 # OS
 .DS_Store
